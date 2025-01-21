@@ -9,7 +9,6 @@ import numpy as np
 import torch
 import blosc
 from PIL import Image
-
 from calvin_env.envs.play_table_env import get_env
 from utils.utils_with_calvin import (
     keypoint_discovery,
@@ -22,11 +21,11 @@ from utils.utils_with_calvin import (
 class Arguments(tap.Tap):
     traj_len: int = 16
     execute_every: int = 4
-    save_path: str = './data/calvin/packaged_ABC_D'
-    root_dir: str = './calvin/dataset/task_ABC_D'
+    save_path: str = '/data/calvin/calvin_processed'
+    root_dir: str = '/data/calvin/calvin_debug_dataset'
     mode: str = 'keypose'  # [keypose, close_loop]
     tasks: Optional[List[str]] = None
-    split: str = 'training'  # [training, validation]
+    split: str = 'validation'  # [training, validation]
 
 
 def make_env(dataset_path, split):
