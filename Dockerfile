@@ -154,7 +154,8 @@ RUN VIRTUALGL_VERSION=$(curl -fsSL "https://api.github.com/repos/VirtualGL/virtu
     chmod u+s /usr/lib/i386-linux-gnu/libdlfaker.so
 
 # Install Python application, and web application
-RUN apt-get update && apt-get install --no-install-recommends -y \
+RUN apt-get update && \
+        DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
         build-essential \
         python3 \
         python3-pip \
@@ -189,7 +190,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 	iputils-ping \ 
 	openssh-client \
         x264 && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 ENV DISPLAY :0
 ENV VGL_REFRESHRATE 60
