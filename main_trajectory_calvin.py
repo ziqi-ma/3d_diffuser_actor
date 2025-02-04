@@ -83,27 +83,31 @@ class TrainTester(BaseTrainTester):
 
     def save_checkpoint(self, model, optimizer, step_id, new_loss, best_loss):
         """Save checkpoint if requested."""
-        print("initiating model saving")
-        if new_loss is None or best_loss is None or new_loss <= best_loss:
-            best_loss = new_loss
+        try:
+            if new_loss is None or best_loss is None or new_loss <= best_loss:
+                best_loss = new_loss
+                torch.save({
+                    "weight": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "iter": step_id + 1,
+                    "best_loss": best_loss
+                }, self.args.log_dir / "best.pth")
             torch.save({
                 "weight": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "iter": step_id + 1,
                 "best_loss": best_loss
-            }, self.args.log_dir / "best.pth")
-        torch.save({
-            "weight": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "iter": step_id + 1,
-            "best_loss": best_loss
-        }, self.args.log_dir / '{:07d}.pth'.format(step_id))
-        torch.save({
-            "weight": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "iter": step_id + 1,
-            "best_loss": best_loss
-        }, self.args.log_dir / "last.pth")
+            }, self.args.log_dir / '{:07d}.pth'.format(step_id))
+            torch.save({
+                "weight": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "iter": step_id + 1,
+                "best_loss": best_loss
+            }, self.args.log_dir / "last.pth")
+        except Exception as e:
+            print(f"Error saving checkpoint: {e}")
+            print(f"At step: {step_id}")
+            print(f"Save directory: {self.args.log_dir}")
         return best_loss
 
     def get_optimizer(self, model):

@@ -19,7 +19,7 @@ fps_subsampling_factor=3
 lang_enhanced=0
 gripper_loc_bounds=tasks/calvin_rel_traj_location_bounds_task_ABC_D.json
 gripper_buffer=0.01
-val_freq=5000
+val_freq=50
 quaternion_format=wxyz
 
 run_log_dir=diffusion_taskABC_D-C$C-B$B-lr$lr-DI$dense_interpolation-$interpolation_length-H$num_history-DT$diffusion_timesteps-backbone$backbone-S$image_size-R$relative_action-wd$wd
