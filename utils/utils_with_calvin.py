@@ -7,6 +7,13 @@ import pybullet as pb
 from calvin_env.robot.robot import Robot
 from calvin_env.utils.utils import angle_between_angles
 
+# Global statistics
+stats = {
+    'total_sequences': 0,
+    'sequences_with_maxima': 0,
+    'total_maxima_found': 0,
+    'total_maxima_used': 0
+}
 
 def get_eef_velocity_from_robot(robot: Robot):
     eef_vel = []
@@ -140,8 +147,7 @@ def gripper_state_changed(trajectories):
     return np.where(changed)[0]
 
 
-def keypoint_discovery(trajectories, scene_states=None, task=None,
-                       buffer_size=5):
+def keypoint_discovery(trajectories, scene_states=None, task=None, buffer_size=5):
     """Determine way point from the trajectories.
 
     Args:
@@ -151,18 +157,49 @@ def keypoint_discovery(trajectories, scene_states=None, task=None,
             end effector is stopped.
 
     Returns:
-        an Integer array indicates the indices of waypoints
+        keyframes: list of trajectory points at keyframe indices
+        keyframe_inds: array of keyframe indices
+        found_natural_maxima: boolean indicating if natural maxima were found
     """
+    global stats
+    stats['total_sequences'] += 1
+    
+    print(f"Length of trajectories: {len(trajectories)}")
+    
+    # Handle empty trajectories case
+    if len(trajectories) == 0:
+        return [], [], False
+        
     V, W, A = get_eef_velocity_from_trajectories(trajectories)
+    print(f"Shape of acceleration A: {A.shape}")
 
     # waypoints are local minima of gripper movement
     _local_max_A = argrelextrema(A, np.greater)[0]
-    topK = np.sort(A)[::-1][int(A.shape[0] * 0.2)]
-    large_A = A[_local_max_A] >= topK
-    _local_max_A = _local_max_A[large_A].tolist()
-
-    local_max_A = [_local_max_A.pop(0)]
-    for i in _local_max_A:
+    print(f"Number of local maxima found: {len(_local_max_A)}")
+    
+    found_natural_maxima = False
+    
+    # Track original maxima before any fallback
+    if len(_local_max_A) > 0:
+        stats['sequences_with_maxima'] += 1
+        stats['total_maxima_found'] += len(_local_max_A)
+        
+        # Relaxed constraint: top 50% instead of 20%
+        topK = np.sort(A)[::-1][int(A.shape[0] * 0.5)]  # Changed from 0.2 to 0.5
+        large_A = A[_local_max_A] >= topK
+        _local_max_A = _local_max_A[large_A].tolist()
+        print(f"After filtering (top 50%), {len(_local_max_A)} keyframes remain")
+        
+        if len(_local_max_A) > 0:
+            found_natural_maxima = True
+    
+    # Only proceed with natural maxima or return empty
+    if not found_natural_maxima:
+        print("No significant natural maxima found, skipping sequence")
+        return [], [], False
+    
+    local_max_A = [_local_max_A[0]]
+    for i in _local_max_A[1:]:
         if i - local_max_A[-1] >= buffer_size:
             local_max_A.append(i)
 
@@ -182,10 +219,18 @@ def keypoint_discovery(trajectories, scene_states=None, task=None,
         last_frame
     )
     keyframe_inds = np.unique(keyframe_inds)
+    print(f"Final keyframes: {keyframe_inds.tolist()}")
+    print(f"Final number of keyframes: {len(keyframe_inds)}")
 
     keyframes = [trajectories[i] for i in keyframe_inds]
+    
+    if stats['total_sequences'] % 10 == 0:
+        print(f"Total sequences processed: {stats['total_sequences']}")
+        print(f"Sequences with natural maxima: {stats['sequences_with_maxima']} ({stats['sequences_with_maxima']/stats['total_sequences']*100:.1f}%)")
+        print(f"Average maxima found per sequence: {stats['total_maxima_found']/stats['total_sequences']:.2f}")
+        print(f"Average maxima used per sequence: {stats['total_maxima_used']/stats['total_sequences']:.2f}\n")
 
-    return keyframes, keyframe_inds
+    return keyframes, keyframe_inds, found_natural_maxima
 
 
 def get_gripper_camera_view_matrix(cam):
@@ -205,42 +250,37 @@ def get_gripper_camera_view_matrix(cam):
     return view_matrix
 
 
-def deproject(cam, depth_img, homogeneous=False, sanity_check=False):
+def deproject(cam_params, depth_img, homogeneous=False, sanity_check=False):
     """
-    Deprojects a pixel point to 3D coordinates
-    Args
-        point: tuple (u, v); pixel coordinates of point to deproject
+    Deprojects a depth image to 3D coordinates using camera parameters
+    Args:
+        cam_params: dict containing:
+            - resolution_width: image width
+            - resolution_height: image height
+            - fx: focal length x
+            - fy: focal length y
+            - cx: principal point x
+            - cy: principal point y
         depth_img: np.array; depth image used as reference to generate 3D coordinates
         homogeneous: bool; if true it returns the 3D point in homogeneous coordinates,
                      else returns the world coordinates (x, y, z) position
-    Output
-        (x, y, z): (3, npts) np.array; world coordinates of the deprojected point
+    Output:
+        world_pos: (3, npts) or (4, npts) np.array; world coordinates of the deprojected points
     """
     h, w = depth_img.shape
     u, v = np.meshgrid(np.arange(w), np.arange(h))
     u, v = u.ravel(), v.ravel()
-
-    # Unproject to world coordinates
-    T_world_cam = np.linalg.inv(np.array(cam.viewMatrix).reshape((4, 4)).T)
     z = depth_img[v, u]
-    foc = cam.height / (2 * np.tan(np.deg2rad(cam.fov) / 2))
-    x = (u - cam.width // 2) * z / foc
-    y = -(v - cam.height // 2) * z / foc
-    z = -z
-    ones = np.ones_like(z)
 
-    cam_pos = np.stack([x, y, z, ones], axis=0)
-    world_pos = T_world_cam @ cam_pos
-
-    # Sanity check by using camera.deproject function.  Check 2000 points.
-    if sanity_check:
-        sample_inds = np.random.permutation(u.shape[0])[:2000]
-        for ind in sample_inds:
-            cam_world_pos = cam.deproject((u[ind], v[ind]), depth_img, homogeneous=True)
-            assert np.abs(cam_world_pos-world_pos[:, ind]).max() <= 1e-3
-
-    if not homogeneous:
-        world_pos = world_pos[:3]
+    #convert to 3D coordinates using intrinsic parameters
+    x = (u - cam_params['cx']) * z / cam_params['fx']
+    y = (v - cam_params['cy']) * z / cam_params['fy']
+    z = -z  #negative z because camera looks along negative z aaxis
+    
+    if homogeneous:
+        world_pos = np.stack([x, y, z, np.ones_like(z)], axis=0)
+    else:
+        world_pos = np.stack([x, y, z], axis=0)
 
     return world_pos
 

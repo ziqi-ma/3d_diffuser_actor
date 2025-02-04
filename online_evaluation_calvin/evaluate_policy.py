@@ -156,7 +156,6 @@ def evaluate_policy(model, env, conf_dir, eval_log_dir=None, save_video=False,
 def evaluate_sequence(env, model, task_checker, initial_state, eval_sequence,
                       val_annotations, save_video):
     """
-    Evaluates a sequence of language instructions.
 
     Args:
         env: an instance of CALVIN_ENV
@@ -201,7 +200,8 @@ def rollout(env, model, task_oracle, subtask, lang_annotation):
         model: an instance of CalvinBaseModel
         task_oracle: an indicator of whether the current task is completed
         subtask: a string indicates the task name
-        lang_annotation: a string indicates the instruction of the task
+        lang_annotation: a string indicates the instr    Evaluates a sequence of language instructions.
+uction of the task
 
     Returns:
         Success/Fail: a boolean indicates whether the task is completed
