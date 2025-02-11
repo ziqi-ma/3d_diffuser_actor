@@ -238,8 +238,8 @@ class TrainTester(BaseTrainTester):
                 curr_gripper.to(device),
                 run_inference=True
             )
-            print(f"action values (pred) {action.isnan().any()}")
-            print(f"trajectory values (gt) {sample['trajectory'].to(device).isnan().any()}")
+            #print(f"action values (pred) {action.isnan().any()}")
+            #print(f"trajectory values (gt) {sample['trajectory'].to(device).isnan().any()}")
             losses, losses_B = criterion.compute_metrics(
                 action,
                 sample["trajectory"].to(device),

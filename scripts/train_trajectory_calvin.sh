@@ -39,7 +39,7 @@ CUDA_LAUNCH_BLOCKING=1 torchrun --nproc_per_node $ngpus --master_port $RANDOM \
     --max_episode_length 20 \
     --train_iters 100 \
     --embedding_dim $C \
-    --use_instruction 1 \
+    --use_instruction 0 \
     --rotation_parametrization 6D \
     --diffusion_timesteps $diffusion_timesteps \
     --val_freq $val_freq \
