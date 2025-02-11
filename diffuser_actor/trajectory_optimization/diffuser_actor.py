@@ -84,56 +84,39 @@ class DiffuserActor(nn.Module):
                       f"has_nan: {has_nan}, has_inf: {has_inf}")
                 if has_nan or has_inf:
                     print(f"First NaN/Inf indices in {name}: {torch.where(torch.isnan(tensor) | torch.isinf(tensor))}")
-
-        # Handle inf values in visible_pcd
         visible_pcd = torch.nan_to_num(visible_pcd, nan=0.0, posinf=1e6, neginf=-1e6)
         visible_pcd = torch.clamp(visible_pcd, min=-100, max=100)  # Reasonable bounds for point cloud coordinates
-        
-        # Compute visual features/positional embeddings
         with torch.cuda.amp.autocast(enabled=False):  # Disable mixed precision for this part
             rgb_feats_pyramid, pcd_pyramid = self.encoder.encode_images(visible_rgb, visible_pcd)
             debug_tensor(rgb_feats_pyramid[0], "rgb_feats_pyramid[0]")
-            
-            # Add gradient clipping for features
             rgb_feats_pyramid = [torch.clamp(feats, min=-100, max=100) for feats in rgb_feats_pyramid]
             pcd_pyramid = [torch.clamp(coords, min=-100, max=100) for coords in pcd_pyramid]
-        
-        # Keep only low-res scale
         context_feats = einops.rearrange(rgb_feats_pyramid[0], "b ncam c h w -> b (ncam h w) c")
-        context = pcd_pyramid[0]
-        
-        # Normalize context features
+        context = pcd_pyramid[0]        
         context_feats = F.layer_norm(context_feats, [context_feats.shape[-1]])
         debug_tensor(context_feats, "context_feats after norm")
-        
-        # Encode instruction
+
         instr_feats = None
         if self.use_instruction:
             instr_feats, _ = self.encoder.encode_instruction(instruction)
-            # Normalize instruction features
             instr_feats = F.layer_norm(instr_feats, [instr_feats.shape[-1]])
             debug_tensor(instr_feats, "instr_feats")
-
-        # Cross-attention vision to language
         if self.use_instruction:
             context_feats = self.encoder.vision_language_attention(context_feats, instr_feats)
             context_feats = F.layer_norm(context_feats, [context_feats.shape[-1]])
             debug_tensor(context_feats, "context_feats after vision_language_attention")
-
-        # Encode gripper history
+        
         adaln_gripper_feats, _ = self.encoder.encode_curr_gripper(curr_gripper, context_feats, context)
         adaln_gripper_feats = F.layer_norm(adaln_gripper_feats, [adaln_gripper_feats.shape[-1]])
         debug_tensor(adaln_gripper_feats, "adaln_gripper_feats")
-
-        # FPS on visual features
         fps_feats, fps_pos = self.encoder.run_fps(
             context_feats.transpose(0, 1),
             self.encoder.relative_pe_layer(context)
         )
+        
         fps_feats = F.layer_norm(fps_feats, [fps_feats.shape[-1]])
         debug_tensor(fps_feats, "fps_feats")
         debug_tensor(fps_pos, "fps_pos")
-
         return (context_feats, context, instr_feats, adaln_gripper_feats, fps_feats, fps_pos)
 
     def policy_forward_pass(self, trajectory, timestep, fixed_inputs):
