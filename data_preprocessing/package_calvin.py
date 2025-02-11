@@ -236,66 +236,48 @@ def init_datas():
 
 def main(split, args):
     """
-    Simplified version for testing with duplicated data.
-    Original CALVIN annotations structure is maintained but simplified.
+    Process CALVIN-style dataset using language annotations.
+    Each annotation represents one complete task sequence.
     """
-    # Hardcoded split points based on your data
-    if split == 'training':
-        # Use sequences up to 1085
-        sequences = range(0, 1080)
-    else:  # validation
-        # Use sequences from 1086 onwards
-        sequences = range(1086, 1358)
-    
-    # Create indices for 10-frame sequences
-    indices = [(i, min(i+9, 1357)) for i in sequences if i % 10 == 0]
-    
-    # Create annotations for this split only
-    n_split_sequences = len(indices)
-    annotations = {
-        'info': {
-            'episodes': [],
-            'indx': indices
-        },
-        'language': {
-            'ann': ['dummy instruction'] * n_split_sequences,
-            'task': ['pick'] * n_split_sequences,
-            'emb': np.zeros((n_split_sequences, 1, 384))
-        }
-    }
-    
+    # Load language annotations
+    annotations = np.load(
+        f'{args.root_dir}/{split}/lang_annotations/auto_lang_ann.npy',
+        allow_pickle=True
+    ).item()
+
+    # Process each task sequence from the annotations
     for anno_ind, (start_id, end_id) in enumerate(annotations['info']['indx']):
         # Skip if task filtering is enabled
         if args.tasks is not None and annotations['language']['task'][anno_ind] not in args.tasks:
             continue
             
-        print(f'Processing {anno_ind}/{len(annotations["info"]["indx"])}, start_id:{start_id}, end_id:{end_id}')
+        print(f'Processing annotation {anno_ind}, start_id:{start_id}, end_id:{end_id}')
         datas = init_datas()
         
-        # Load episodes
+        # Load all episodes for this task sequence
         for ep_id in range(start_id, end_id + 1):
             episode = f'episode_{ep_id:07d}.npz'
-            load_episode(
-                args.root_dir,
-                split,
-                episode,
-                datas,
-                anno_ind
-            )
+            try:
+                load_episode(
+                    args.root_dir,
+                    split,
+                    episode,
+                    datas,
+                    anno_ind
+                )
+            except FileNotFoundError:
+                print(f"Warning: Episode {episode} not found, skipping...")
+                continue
 
-        # Process data and collect statistics
-        keyframes, keyframe_inds, found_natural_maxima = keypoint_discovery(datas['proprios'])
-        
-        # Skip sequences without natural maxima
-        if not found_natural_maxima:
-            continue
+        # Detect keyframes within the sequence
+        _, keyframe_inds, check = keypoint_discovery(datas['proprios'])
 
         state_dict = process_datas(
             datas, args.mode, args.traj_len, args.execute_every, keyframe_inds
         )
 
         # For testing, use simple scene assignment
-        scene = 'A' if split == 'training' else 'D'
+        scene = 'A' if split == 'training' else 'A'
 
         # Save processed data
         ep_save_path = f'{args.save_path}/{split}/{scene}+0/ann_{anno_ind}.dat'

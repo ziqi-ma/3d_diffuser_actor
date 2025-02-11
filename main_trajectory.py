@@ -238,6 +238,8 @@ class TrainTester(BaseTrainTester):
                 curr_gripper.to(device),
                 run_inference=True
             )
+            print(f"action values (pred) {action.isnan().any()}")
+            print(f"trajectory values (gt) {sample['trajectory'].to(device).isnan().any()}")
             losses, losses_B = criterion.compute_metrics(
                 action,
                 sample["trajectory"].to(device),
@@ -282,7 +284,7 @@ class TrainTester(BaseTrainTester):
             # Also log to terminal
             print(f"Step {step_id}:")
             for key, value in values.items():
-                print(f"{key}: {value:.03f}")
+                print(f"{key}: {value}")
 
         return values.get('val-losses/traj_pos_acc_001', None)
 
@@ -320,6 +322,7 @@ class TrajectoryCriterion:
     @staticmethod
     def compute_metrics(pred, gt, mask):
         # pred/gt are (B, L, 7), mask (B, L)
+        #print(f"debugging loss values {pred[..., :3] - gt[..., :3]}")
         pos_l2 = ((pred[..., :3] - gt[..., :3]) ** 2).sum(-1).sqrt()
         # symmetric quaternion eval
         quat_l1 = (pred[..., 3:7] - gt[..., 3:7]).abs().sum(-1)

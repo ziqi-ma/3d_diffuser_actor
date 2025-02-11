@@ -3,7 +3,7 @@ main_dir=Planner_Calvin
 dataset=/workspace/3d_diffuser_actor/calvin_processed/training/
 valset=/workspace/3d_diffuser_actor/calvin_processed/validation/
 
-lr=1e-4
+lr=1e-5
 wd=1e-2
 dense_interpolation=1
 interpolation_length=20
@@ -37,7 +37,7 @@ CUDA_LAUNCH_BLOCKING=1 torchrun --nproc_per_node $ngpus --master_port $RANDOM \
     --image_size $image_size \
     --num_workers 4 \
     --max_episode_length 20 \
-    --train_iters 500 \
+    --train_iters 100 \
     --embedding_dim $C \
     --use_instruction 1 \
     --rotation_parametrization 6D \
@@ -65,26 +65,26 @@ CUDA_LAUNCH_BLOCKING=1 torchrun --nproc_per_node $ngpus --master_port $RANDOM \
     --run_log_dir $run_log_dir
 
 
-torchrun --nproc_per_node $ngpus --master_port $RANDOM \
-    online_evaluation_calvin/evaluate_policy.py \
-    --calvin_dataset_path calvin/dataset/task_ABC_D \
-    --calvin_model_path calvin/calvin_models \
-    --text_encoder clip \
-    --text_max_length 16 \
-    --tasks A\
-    --backbone $backbone \
-    --gripper_loc_bounds_buffer $gripper_buffer \
-    --embedding_dim $C \
-    --action_dim 7 \
-    --use_instruction 1 \
-    --rotation_parametrization 6D \
-    --diffusion_timesteps $diffusion_timesteps \
-    --interpolation_length $interpolation_length \
-    --num_history $num_history \
-    --relative_action $relative_action \
-    --fps_subsampling_factor $fps_subsampling_factor \
-    --lang_enhanced $lang_enhanced \
-    --save_video 0 \
-    --base_log_dir train_logs/${main_dir}/${run_log_dir}/eval_logs/ \
-    --quaternion_format $quaternion_format \
-    --checkpoint train_logs/${main_dir}/${run_log_dir}/last.pth
+# torchrun --nproc_per_node $ngpus --master_port $RANDOM \
+#     online_evaluation_calvin/evaluate_policy.py \
+#     --calvin_dataset_path calvin/dataset/task_ABC_D \
+#     --calvin_model_path calvin/calvin_models \
+#     --text_encoder clip \
+#     --text_max_length 16 \
+#     --tasks A\
+#     --backbone $backbone \
+#     --gripper_loc_bounds_buffer $gripper_buffer \
+#     --embedding_dim $C \
+#     --action_dim 7 \
+#     --use_instruction 1 \
+#     --rotation_parametrization 6D \
+#     --diffusion_timesteps $diffusion_timesteps \
+#     --interpolation_length $interpolation_length \
+#     --num_history $num_history \
+#     --relative_action $relative_action \
+#     --fps_subsampling_factor $fps_subsampling_factor \
+#     --lang_enhanced $lang_enhanced \
+#     --save_video 0 \
+#     --base_log_dir train_logs/${main_dir}/${run_log_dir}/eval_logs/ \
+#     --quaternion_format $quaternion_format \
+#     --checkpoint train_logs/${main_dir}/${run_log_dir}/last.pth

@@ -76,45 +76,65 @@ class DiffuserActor(nn.Module):
 
     def encode_inputs(self, visible_rgb, visible_pcd, instruction,
                       curr_gripper):
-        # Compute visual features/positional embeddings at different scales
-        rgb_feats_pyramid, pcd_pyramid = self.encoder.encode_images(
-            visible_rgb, visible_pcd
-        )
-        # Keep only low-res scale
-        context_feats = einops.rearrange(
-            rgb_feats_pyramid[0],
-            "b ncam c h w -> b (ncam h w) c"
-        )
-        context = pcd_pyramid[0]
+        def debug_tensor(tensor, name):
+            if isinstance(tensor, torch.Tensor):
+                has_nan = torch.isnan(tensor).any()
+                has_inf = torch.isinf(tensor).any()
+                print(f"{name} stats - shape: {tensor.shape}, range: [{tensor.min()}, {tensor.max()}], "
+                      f"has_nan: {has_nan}, has_inf: {has_inf}")
+                if has_nan or has_inf:
+                    print(f"First NaN/Inf indices in {name}: {torch.where(torch.isnan(tensor) | torch.isinf(tensor))}")
 
-        # Encode instruction (B, 53, F)
+        # Handle inf values in visible_pcd
+        visible_pcd = torch.nan_to_num(visible_pcd, nan=0.0, posinf=1e6, neginf=-1e6)
+        visible_pcd = torch.clamp(visible_pcd, min=-100, max=100)  # Reasonable bounds for point cloud coordinates
+        
+        # Compute visual features/positional embeddings
+        with torch.cuda.amp.autocast(enabled=False):  # Disable mixed precision for this part
+            rgb_feats_pyramid, pcd_pyramid = self.encoder.encode_images(visible_rgb, visible_pcd)
+            debug_tensor(rgb_feats_pyramid[0], "rgb_feats_pyramid[0]")
+            
+            # Add gradient clipping for features
+            rgb_feats_pyramid = [torch.clamp(feats, min=-100, max=100) for feats in rgb_feats_pyramid]
+            pcd_pyramid = [torch.clamp(coords, min=-100, max=100) for coords in pcd_pyramid]
+        
+        # Keep only low-res scale
+        context_feats = einops.rearrange(rgb_feats_pyramid[0], "b ncam c h w -> b (ncam h w) c")
+        context = pcd_pyramid[0]
+        
+        # Normalize context features
+        context_feats = F.layer_norm(context_feats, [context_feats.shape[-1]])
+        debug_tensor(context_feats, "context_feats after norm")
+        
+        # Encode instruction
         instr_feats = None
         if self.use_instruction:
             instr_feats, _ = self.encoder.encode_instruction(instruction)
+            # Normalize instruction features
+            instr_feats = F.layer_norm(instr_feats, [instr_feats.shape[-1]])
+            debug_tensor(instr_feats, "instr_feats")
 
         # Cross-attention vision to language
         if self.use_instruction:
-            # Attention from vision to language
-            context_feats = self.encoder.vision_language_attention(
-                context_feats, instr_feats
-            )
+            context_feats = self.encoder.vision_language_attention(context_feats, instr_feats)
+            context_feats = F.layer_norm(context_feats, [context_feats.shape[-1]])
+            debug_tensor(context_feats, "context_feats after vision_language_attention")
 
-        # Encode gripper history (B, nhist, F)
-        adaln_gripper_feats, _ = self.encoder.encode_curr_gripper(
-            curr_gripper, context_feats, context
-        )
+        # Encode gripper history
+        adaln_gripper_feats, _ = self.encoder.encode_curr_gripper(curr_gripper, context_feats, context)
+        adaln_gripper_feats = F.layer_norm(adaln_gripper_feats, [adaln_gripper_feats.shape[-1]])
+        debug_tensor(adaln_gripper_feats, "adaln_gripper_feats")
 
-        # FPS on visual features (N, B, F) and (B, N, F, 2)
+        # FPS on visual features
         fps_feats, fps_pos = self.encoder.run_fps(
             context_feats.transpose(0, 1),
             self.encoder.relative_pe_layer(context)
         )
-        return (
-            context_feats, context,  # contextualized visual features
-            instr_feats,  # language features
-            adaln_gripper_feats,  # gripper history features
-            fps_feats, fps_pos  # sampled visual features
-        )
+        fps_feats = F.layer_norm(fps_feats, [fps_feats.shape[-1]])
+        debug_tensor(fps_feats, "fps_feats")
+        debug_tensor(fps_pos, "fps_pos")
+
+        return (context_feats, context, instr_feats, adaln_gripper_feats, fps_feats, fps_pos)
 
     def policy_forward_pass(self, trajectory, timestep, fixed_inputs):
         # Parse inputs
@@ -192,12 +212,33 @@ class DiffuserActor(nn.Module):
         instruction,
         curr_gripper
     ):
+
+        def check_nans(data, name):
+            if isinstance(data, tuple):
+                has_nans = False
+                for i, tensor in enumerate(data):
+                    if isinstance(tensor, torch.Tensor):
+                        if torch.isnan(tensor).any():
+                            print(f"NaN detected in {name}[{i}]")
+                            nan_indices = torch.where(torch.isnan(tensor))
+                            print(f"NaN indices in {name}[{i}]: {nan_indices}")
+                            has_nans = True
+                return has_nans
+            elif isinstance(data, torch.Tensor):
+                if torch.isnan(data).any():
+                    print(f"NaN detected in {name}")
+                    nan_indices = torch.where(torch.isnan(data))
+                    print(f"NaN indices in {name}: {nan_indices}")
+                    return True
+            return False
+
         # Normalize all pos
         pcd_obs = pcd_obs.clone()
         curr_gripper = curr_gripper.clone()
         pcd_obs = torch.permute(self.normalize_pos(
             torch.permute(pcd_obs, [0, 1, 3, 4, 2])
         ), [0, 1, 4, 2, 3])
+        check_nans(pcd_obs, "pcd_obs after normalize and permute")
         curr_gripper[..., :3] = self.normalize_pos(curr_gripper[..., :3])
         curr_gripper = self.convert_rot(curr_gripper)
 
@@ -205,6 +246,7 @@ class DiffuserActor(nn.Module):
         fixed_inputs = self.encode_inputs(
             rgb_obs, pcd_obs, instruction, curr_gripper
         )
+        check_nans(fixed_inputs, "fixed_inputs after encode_inputs")
 
         # Condition on start-end pose
         B, nhist, D = curr_gripper.shape
@@ -215,13 +257,23 @@ class DiffuserActor(nn.Module):
         cond_mask = torch.zeros_like(cond_data)
         cond_mask = cond_mask.bool()
 
+        has_nans = any([
+            check_nans(cond_data, "cond_data"),
+            check_nans(cond_mask.float(), "cond_mask"),  # Convert bool to float for NaN check
+            check_nans(fixed_inputs, "fixed_inputs")
+        ])
         # Sample
+        #print(f"conditional sample check {cond_data.isnan().any()}, {cond_mask.isnan().any()}, {fixed_inputs.isnan().any()}")
         trajectory = self.conditional_sample(
             cond_data,
             cond_mask,
             fixed_inputs
         )
+        if has_nans:
+            raise ValueError("NaN values detected before conditional_sample")
 
+        print(f"check for nan in trajectory {trajectory.isnan().any()}")
+        print(f"trajectory values {trajectory}")
         # Normalize quaternion
         if self._rotation_parametrization != '6D':
             trajectory[:, :, 3:7] = normalise_quat(trajectory[:, :, 3:7])
@@ -321,14 +373,22 @@ class DiffuserActor(nn.Module):
             The model converts it to 6D internally if needed.
         """
         if self._relative:
+            #print(f"check if any nan before conversion to rel {pcd_obs.isnan().any()}")
             pcd_obs, curr_gripper = self.convert2rel(pcd_obs, curr_gripper)
         if gt_trajectory is not None:
             gt_openess = gt_trajectory[..., 7:]
             gt_trajectory = gt_trajectory[..., :7]
         curr_gripper = curr_gripper[..., :7]
 
+        pcd_obs_clean = pcd_obs.clone()
+        nan_mask = torch.isnan(pcd_obs_clean)        
+        pcd_obs_clean[nan_mask] = 0.0
+        pcd_obs = pcd_obs_clean
         # gt_trajectory is expected to be in the quaternion format
         if run_inference:
+            #print(f"checking pcd observation {pcd_obs}")
+            #print(f"type check {type(trajectory_mask)}, {type(rgb_obs)}, {type(pcd_obs)}, {type(instruction)}, {type(curr_gripper)}")
+            print(f"NaN check - trajectory_mask: {trajectory_mask.isnan().any()}, rgb_obs: {rgb_obs.isnan().any()}, pcd_obs: {pcd_obs.isnan().any()}, instruction: {instruction.isnan().any()}, curr_gripper: {curr_gripper.isnan().any()}")
             return self.compute_trajectory(
                 trajectory_mask,
                 rgb_obs,
