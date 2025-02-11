@@ -1,17 +1,17 @@
 main_dir=Planner_Calvin
 
-dataset=/data/calvin/calvin_debug_dataset/validation
-valset=/data/calvin/calvin_debug_dataset/validation
+dataset=calvin_processed/training
+valset=calvin_processed/validation
 
 lr=3e-4
 wd=5e-3
 dense_interpolation=1
 interpolation_length=20
-num_history=3
+num_history=1
 diffusion_timesteps=25
 B=30
 C=192
-ngpus=6
+ngpus=2
 backbone=clip
 image_size="256,256"
 relative_action=1
@@ -26,15 +26,14 @@ export PYTHONPATH=`pwd`:$PYTHONPATH
 
 torchrun --nproc_per_node $ngpus --master_port $RANDOM \
     online_evaluation_calvin/evaluate_policy.py \
-    --calvin_dataset_path /data/calvin/calvin_debug_dataset \
-    --calvin_model_path /app/calvin/calvin_models \
+    --calvin_dataset_path calvin_new \
+    --calvin_model_path calvin/calvin_models \
     --text_encoder clip \
     --text_max_length 16 \
-    --tasks A B C D\
+    --tasks A\
     --backbone $backbone \
     --gripper_loc_bounds $gripper_loc_bounds \
     --gripper_loc_bounds_buffer $gripper_buffer \
-    --calvin_gripper_loc_bounds /data/calvin/calvin_debug_dataset/validation/statistics.yaml \
     --embedding_dim $C \
     --action_dim 7 \
     --use_instruction 1 \
@@ -48,4 +47,4 @@ torchrun --nproc_per_node $ngpus --master_port $RANDOM \
     --save_video 0 \
     --base_log_dir train_logs/${main_dir}/pretrained/eval_logs/ \
     --quaternion_format $quaternion_format \
-    --checkpoint /data/checkpoints/diffuseractor/diffuser_actor_calvin.pth
+    --checkpoint train_logs/diffuser_actor_calvin_nohistory.pth

@@ -28,3 +28,9 @@ calvin/
 
 # data directory
 data/
+
+#raw data
+calvin_new/
+calvin_processed/
+calvin_processed_old/
+

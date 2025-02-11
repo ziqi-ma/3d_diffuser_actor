@@ -1,0 +1,18 @@
+{
+  "total_sequences": 9,
+  "total_annotations": 9,
+  "unique_tasks": [
+    "push_pink_block_right",
+    "lift_blue_block_slider",
+    "lift_red_block_table",
+    "place_in_slider",
+    "turn_off_lightbulb",
+    "turn_on_lightbulb"
+  ],
+  "embedding_shape": "(9, 1, 384)",
+  "sequence_length_stats": {
+    "mean": 55.888888888888886,
+    "min": 34,
+    "max": 65
+  }
+}

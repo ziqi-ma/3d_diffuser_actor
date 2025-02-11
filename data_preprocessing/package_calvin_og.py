@@ -9,6 +9,8 @@ import numpy as np
 import torch
 import blosc
 from PIL import Image
+
+from calvin_env.envs.play_table_env import get_env
 from utils.utils_with_calvin import (
     keypoint_discovery,
     deproject,
@@ -20,11 +22,18 @@ from utils.utils_with_calvin import (
 class Arguments(tap.Tap):
     traj_len: int = 16
     execute_every: int = 4
-    save_path: str = 'calvin_processed'
-    root_dir: str = 'calvin_new'
+    save_path: str = 'calvin/dataset/calvin_processed_dataset'
+    root_dir: str = 'calvin/dataset/calvin_debug_dataset'
     mode: str = 'keypose'  # [keypose, close_loop]
     tasks: Optional[List[str]] = None
-    split: str = 'validation'  # [training, validation]
+    split: str = 'training'  # [training, validation]
+
+
+def make_env(dataset_path, split):
+    val_folder = Path(dataset_path) / f"{split}"
+    env = get_env(val_folder, show_gui=False, connection_mode="direct")
+    return env
+
 
 def process_datas(datas, mode, traj_len, execute_every, keyframe_inds):
     """Fetch and drop datas to make a trajectory
@@ -154,57 +163,56 @@ def process_datas(datas, mode, traj_len, execute_every, keyframe_inds):
         trajectories,
         datas['annotation_id']
     ]
+
     return state_dict
 
 
-def load_episode(root_dir, split, episode, datas, ann_id):
+def load_episode(env, root_dir, split, episode, datas, ann_id):
+    """Load episode and process datas
+
+    Args:
+        root_dir: a string of the root directory of the dataset
+        split: a string of the split of the dataset
+        episode: a string of the episode name
+        datas: a dict of the datas to be saved/loaded
+            - static_pcd: a list of nd.arrays with shape (height, width, 3)
+            - static_rgb: a list of nd.arrays with shape (height, width, 3)
+            - gripper_pcd: a list of nd.arrays with shape (height, width, 3)
+            - gripper_rgb: a list of nd.arrays with shape (height, width, 3)
+            - proprios: a list of nd.arrays with shape (8,)
+            - annotation_id: a list of ints
+    """
     data = np.load(f'{root_dir}/{split}/{episode}')
-    camera_info_file = np.load(f'{root_dir}/camera_info.npz', allow_pickle=True)
-    camera_info = camera_info_file['data'].item()  # Add .item() to convert numpy object array to dict
-    # Create camera parameter dictionaries with dimensions from loaded data
-    static_cam_params = {
-        'resolution_width': camera_info['static']['resolution_width'],
-        'resolution_height': camera_info['static']['resolution_height'],
-        'fx': camera_info['static']['fx'],
-        'fy': camera_info['static']['fy'],
-        'cx': camera_info['static']['cx'],
-        'cy': camera_info['static']['cy'],
-        'width': data['rgb_static'].shape[1],
-        'height': data['rgb_static'].shape[0]
-    }
-    
-    gripper_cam_params = {
-        'resolution_width': camera_info['gripper']['resolution_width'],
-        'resolution_height': camera_info['gripper']['resolution_height'],
-        'fx': camera_info['gripper']['fx'],
-        'fy': camera_info['gripper']['fy'],
-        'cx': camera_info['gripper']['cx'],
-        'cy': camera_info['gripper']['cy'],
-        'width': data['rgb_gripper'].shape[1],
-        'height': data['rgb_gripper'].shape[0]
-    }
-    # Use the modified deproject function
+
+    rgb_static = data['rgb_static']  # (200, 200, 3)
+    rgb_gripper = data['rgb_gripper']  # (84, 84, 3)
+    depth_static = data['depth_static']  # (200, 200)
+    depth_gripper = data['depth_gripper']  # (84, 84)
+
+    # data['robot_obs'] is (15,), data['scene_obs'] is (24,)
+    env.reset(robot_obs=data['robot_obs'], scene_obs=data['scene_obs'])
+    static_cam = env.cameras[0]
+    gripper_cam = env.cameras[1]
+    gripper_cam.viewMatrix = get_gripper_camera_view_matrix(gripper_cam)
+
     static_pcd = deproject(
-        static_cam_params, 
-        data['depth_static'],
-        homogeneous=False
+        static_cam, depth_static,
+        homogeneous=False, sanity_check=False
     ).transpose(1, 0)
     static_pcd = np.reshape(
-        static_pcd, (data['depth_static'].shape[0], data['depth_static'].shape[1], 3)
+        static_pcd, (depth_static.shape[0], depth_static.shape[1], 3)
     )
-
     gripper_pcd = deproject(
-        gripper_cam_params,
-        data['depth_gripper'],
-        homogeneous=False
+        gripper_cam, depth_gripper,
+        homogeneous=False, sanity_check=False
     ).transpose(1, 0)
     gripper_pcd = np.reshape(
-        gripper_pcd, (data['depth_gripper'].shape[0], data['depth_gripper'].shape[1], 3)
+        gripper_pcd, (depth_gripper.shape[0], depth_gripper.shape[1], 3)
     )
 
     # map RGB to [-1, 1]
-    rgb_static = data['rgb_static'] / 255. * 2 - 1
-    rgb_gripper = data['rgb_gripper'] / 255. * 2 - 1
+    rgb_static = rgb_static / 255. * 2 - 1
+    rgb_gripper = rgb_gripper / 255. * 2 - 1
 
     # Map gripper openess to [0, 1]
     proprio = np.concatenate([
@@ -236,54 +244,93 @@ def init_datas():
 
 def main(split, args):
     """
-    Process CALVIN-style dataset using language annotations.
-    Each annotation represents one complete task sequence.
+    CALVIN contains long videos of "tasks" executed in order
+    with noisy transitions between them. The 'annotations' json contains
+    info on how to segment those videos.
+
+    Original CALVIN annotations:
+    {
+        'info': {
+            'episodes': [],
+            'indx': [(788072, 788136), (899273, 899337), (1427083, 1427147)]
+                list of tuples indicating start-end of a task
+        },
+        'language': {
+            'ann': list of str with len=17870, instructions,
+            'task': list of str with len=17870, task names,
+            'emb': array (17870, 1, 384)
+        }
+    }
+
+    Save:
+    state_dict = [
+        frame_ids,  # [0, 1, 2...]
+        rgb_pcd,  # tensor [len(frame_ids), ncam, 2, 3, 200, 200]
+        action_tensors,  # [tensor(1, 8)]
+        camera_dicts,  # [{'front': (0, 0), 'wrist': (0, 0)}]
+        gripper_tensors,  # [tensor(1, 8)]
+        trajectories,  # [tensor(N, 8) or tensor(2, 8) if keyposes]
+        datas['annotation_id']  # [int]
+    ]
     """
-    # Load language annotations
     annotations = np.load(
         f'{args.root_dir}/{split}/lang_annotations/auto_lang_ann.npy',
         allow_pickle=True
     ).item()
+    env = make_env(args.root_dir, split)
 
-    # Process each task sequence from the annotations
     for anno_ind, (start_id, end_id) in enumerate(annotations['info']['indx']):
-        # Skip if task filtering is enabled
+        # Step 1. load episodes of the same task
+        len_anno = len(annotations['info']['indx'])
         if args.tasks is not None and annotations['language']['task'][anno_ind] not in args.tasks:
             continue
-            
-        print(f'Processing annotation {anno_ind}, start_id:{start_id}, end_id:{end_id}')
+        print(f'Processing {anno_ind}/{len_anno}, start_id:{start_id}, end_id:{end_id}')
         datas = init_datas()
-        
-        # Load all episodes for this task sequence
         for ep_id in range(start_id, end_id + 1):
-            episode = f'episode_{ep_id:07d}.npz'
-            try:
-                load_episode(
-                    args.root_dir,
-                    split,
-                    episode,
-                    datas,
-                    anno_ind
-                )
-            except FileNotFoundError:
-                print(f"Warning: Episode {episode} not found, skipping...")
-                continue
+            episode = 'episode_{:07d}.npz'.format(ep_id)
+            load_episode(
+                env,
+                args.root_dir,
+                split,
+                episode,
+                datas,
+                anno_ind
+            )
 
-        # Detect keyframes within the sequence
-        _, keyframe_inds, check = keypoint_discovery(datas['proprios'])
+        # Step 2. detect keyframes within the episode
+        _, keyframe_inds = keypoint_discovery(datas['proprios'])
 
         state_dict = process_datas(
             datas, args.mode, args.traj_len, args.execute_every, keyframe_inds
         )
 
-        # For testing, use simple scene assignment
-        scene = 'A' if split == 'training' else 'A'
+        # Step 3. determine scene
+        if split == 'training':
+            scene_info = np.load(
+                f'{args.root_dir}/training/scene_info.npy',
+                allow_pickle=True
+            ).item()
+            if ("calvin_scene_B" in scene_info and
+                start_id <= scene_info["calvin_scene_B"][1]):
+                scene = "B"
+            elif ("calvin_scene_C" in scene_info and
+                  start_id <= scene_info["calvin_scene_C"][1]):
+                scene = "C"
+            elif ("calvin_scene_A" in scene_info and
+                  start_id <= scene_info["calvin_scene_A"][1]):
+                scene = "A"
+            else:
+                scene = "D"
+        else:
+            scene = 'D'
 
-        # Save processed data
+        # Step 4. save to .dat file
         ep_save_path = f'{args.save_path}/{split}/{scene}+0/ann_{anno_ind}.dat'
         os.makedirs(os.path.dirname(ep_save_path), exist_ok=True)
         with open(ep_save_path, "wb") as f:
             f.write(blosc.compress(pickle.dumps(state_dict)))
+
+    env.close()
 
 
 if __name__ == "__main__":

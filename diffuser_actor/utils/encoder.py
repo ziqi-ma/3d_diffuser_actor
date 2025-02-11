@@ -269,6 +269,11 @@ class Encoder(nn.Module):
         return sampled_context_features, sampled_context_pos
 
     def vision_language_attention(self, feats, instr_feats):
+        #print("Vision-Language Attention shapes:")
+        #print(f"context_feats: {feats.shape}")
+        #print(f"instr_feats: {instr_feats.shape}")
+        
+    
         feats, _ = self.vl_attention[0](
             seq1=feats, seq1_key_padding_mask=None,
             seq2=instr_feats, seq2_key_padding_mask=None,

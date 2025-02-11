@@ -33,7 +33,6 @@ class TrainTester(BaseTrainTester):
 
     def get_datasets(self):
         """Initialize datasets."""
-        # Load instruction, based on which we load tasks/variations
         train_instruction = load_instructions(
             self.args.instructions, 'training'
         )
@@ -41,13 +40,13 @@ class TrainTester(BaseTrainTester):
             self.args.instructions, 'validation'
         )
         taskvar = [
-            ("A", 0), ("B", 0), ("C", 0), ("D", 0),
+            ("A", 0),
         ]
 
         # Initialize datasets with arguments
         train_dataset = CalvinDataset(
             root=self.args.dataset,
-            instructions=train_instruction,
+            instructions=train_instruction,  # Just pass True
             taskvar=taskvar,
             max_episode_length=self.args.max_episode_length,
             cache_size=self.args.cache_size,
@@ -63,6 +62,8 @@ class TrainTester(BaseTrainTester):
             interpolation_length=self.args.interpolation_length,
             relative_action=bool(self.args.relative_action)
         )
+        print(f"Number of training episodes: {len(train_dataset._episodes)}")
+
         test_dataset = CalvinDataset(
             root=self.args.valset,
             instructions=test_instruction,
@@ -84,26 +85,31 @@ class TrainTester(BaseTrainTester):
 
     def save_checkpoint(self, model, optimizer, step_id, new_loss, best_loss):
         """Save checkpoint if requested."""
-        if new_loss is None or best_loss is None or new_loss <= best_loss:
-            best_loss = new_loss
+        try:
+            if new_loss is None or best_loss is None or new_loss <= best_loss:
+                best_loss = new_loss
+                torch.save({
+                    "weight": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "iter": step_id + 1,
+                    "best_loss": best_loss
+                }, self.args.log_dir / "best.pth")
             torch.save({
                 "weight": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
                 "iter": step_id + 1,
                 "best_loss": best_loss
-            }, self.args.log_dir / "best.pth")
-        torch.save({
-            "weight": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "iter": step_id + 1,
-            "best_loss": best_loss
-        }, self.args.log_dir / '{:07d}.pth'.format(step_id))
-        torch.save({
-            "weight": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
-            "iter": step_id + 1,
-            "best_loss": best_loss
-        }, self.args.log_dir / "last.pth")
+            }, self.args.log_dir / '{:07d}.pth'.format(step_id))
+            torch.save({
+                "weight": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "iter": step_id + 1,
+                "best_loss": best_loss
+            }, self.args.log_dir / "last.pth")
+        except Exception as e:
+            print(f"Error saving checkpoint: {e}")
+            print(f"At step: {step_id}")
+            print(f"Save directory: {self.args.log_dir}")
         return best_loss
 
     def get_optimizer(self, model):

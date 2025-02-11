@@ -174,6 +174,7 @@ class BaseTrainTester:
                     )
                 )
                 if dist.get_rank() == 0:  # save model
+                    print("saving model")
                     best_loss = self.save_checkpoint(
                         model, optimizer, step_id,
                         new_loss, best_loss
