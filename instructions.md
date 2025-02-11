@@ -26,14 +26,22 @@ We then want to convert all the raw data to calvin format that can then be prepr
 $ python3 calvin_converter.py
 ```
 This should create a folder called `calvin_new` in the 3d-diffuser-actor folder.
-We then want to process this data and convert it to a format compatible with 3d-diffuser-actor.
+We then want to process this data and convert it to a format compatible with 3d-diffuser-actor. Before doing this, we want to produce language instructions to create
+correct CLIP embeddings for instructions. To generate npy files for these run:
+```bash
+$ python3 data_preprocessing/create_lang_annotations.py
+```
+Then run:
 ```bash
 $ python3 data_preprocessing/package_calvin.py --split training
 $ python3 data_preprocessing/package_calvin.py --split validation
 ```
-This should create a new folder called `calvin_processed` with the required structure. For now, the indices for training and validation set from calvin data has been hardcoded for `run10` for quick testing. This will be changed soon.
-
-To train the policy, run:
+This should create a new folder called `calvin_processed` with the required structure. We want to then create instruction files in the same format that 3d diffuser actor requires. Run:
+```bash
+$ python3 data_preprocessing/preprocess_calvin_instructions.py --output instructions/calvin_task_ABC_D/training.pkl --model_max_length 16 --annotation_path ./calvin_new/training/lang_annotations/auto_lang_ann.npy
+$ python3 data_preprocessing/preprocess_calvin_instructions.py --output instructions/calvin_task_ABC_D/validation.pkl --model_max_length 16 --annotation_path ./calvin_new/validation/lang_annotations/auto_lang_ann.npy
+```
+Now we can train the policy, run:
 ```bash
 $ bash scripts/train_trajectory_calvin.sh
 ```

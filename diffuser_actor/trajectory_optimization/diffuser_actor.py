@@ -84,9 +84,10 @@ class DiffuserActor(nn.Module):
                       f"has_nan: {has_nan}, has_inf: {has_inf}")
                 if has_nan or has_inf:
                     print(f"First NaN/Inf indices in {name}: {torch.where(torch.isnan(tensor) | torch.isinf(tensor))}")
+                    
         visible_pcd = torch.nan_to_num(visible_pcd, nan=0.0, posinf=1e6, neginf=-1e6)
-        visible_pcd = torch.clamp(visible_pcd, min=-100, max=100)  # Reasonable bounds for point cloud coordinates
-        with torch.cuda.amp.autocast(enabled=False):  # Disable mixed precision for this part
+        visible_pcd = torch.clamp(visible_pcd, min=-100, max=100)  
+        with torch.cuda.amp.autocast(enabled=False): 
             rgb_feats_pyramid, pcd_pyramid = self.encoder.encode_images(visible_rgb, visible_pcd)
             debug_tensor(rgb_feats_pyramid[0], "rgb_feats_pyramid[0]")
             rgb_feats_pyramid = [torch.clamp(feats, min=-100, max=100) for feats in rgb_feats_pyramid]
