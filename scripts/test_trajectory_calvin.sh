@@ -34,7 +34,6 @@ torchrun --nproc_per_node $ngpus --master_port $RANDOM \
     --backbone $backbone \
     --gripper_loc_bounds $gripper_loc_bounds \
     --gripper_loc_bounds_buffer $gripper_buffer \
-    --calvin_gripper_loc_bounds calvin/dataset/calvin_debug_dataset/validation/statistics.yaml \
     --embedding_dim $C \
     --action_dim 7 \
     --use_instruction 1 \

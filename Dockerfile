@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.6.1-cudnn8-devel-ubuntu20.04
+FROM ghcr.io/selkies-project/nvidia-egl-desktop:20.04-20240425164112
 ENV PATH="/root/miniconda3/bin:$PATH"
 ARG PATH="/root/miniconda3/bin:$PATH"
 RUN apt-get update && apt-get install -y libopenblas-dev
@@ -7,7 +7,6 @@ RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y git
 RUN apt install libx11-dev -y
-RUN apt-get install libgles2-mesa-dev -y
 # install conda
 # Install Miniconda on x86 or ARM platforms
 RUN DEBIAN_FRONTEND=noninteractive apt-get install python3-opengl x11-apps zip libglib2.0-0 libsm6 libxrender1 libxext6 -y
@@ -37,6 +36,10 @@ ENV WEBRTC_ENABLE_RESIZE false
 ENV ENABLE_AUDIO false
 ENV ENABLE_BASIC_AUTH true
 
+ENV NVIDIA_DRIVER_CAPABILITIES all
+ENV __NV_PRIME_RENDER_OFFLOAD 1
+ENV __GLX_VENDOR_LIBRARY_NAME nvidia
+
 # Temporary fix for NVIDIA container repository
 RUN apt-get clean && \
     apt-key adv --fetch-keys "https://developer.download.nvidia.com/compute/cuda/repos/$(cat /etc/os-release | grep '^ID=' | awk -F'=' '{print $2}')$(cat /etc/os-release | grep '^VERSION_ID=' | awk -F'=' '{print $2}' | sed 's/[^0-9]*//g')/x86_64/3bf863cc.pub" && \
@@ -52,8 +55,8 @@ ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 
 # Install Xvfb, Xfce Desktop, and others
-RUN dpkg --add-architecture i386 && \
-    apt-get update && apt-get install --no-install-recommends -y \
+RUN DEBIAN_FRONTEND=noninteractive dpkg --add-architecture i386 && \
+    DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
         software-properties-common \
         apt-transport-https \
         apt-utils \

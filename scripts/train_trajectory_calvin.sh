@@ -3,13 +3,13 @@ main_dir=Planner_Calvin
 dataset=/workspace/3d_diffuser_actor/calvin_processed/training/
 valset=/workspace/3d_diffuser_actor/calvin_processed/validation/
 
-lr=3e-4
-wd=5e-3
+lr=1e-4
+wd=1e-2
 dense_interpolation=1
 interpolation_length=20
 num_history=3
 diffusion_timesteps=25
-B=30
+B=8
 C=192
 ngpus=2
 backbone=clip
@@ -36,8 +36,8 @@ CUDA_LAUNCH_BLOCKING=1 torchrun --nproc_per_node $ngpus --master_port $RANDOM \
     --gripper_loc_bounds_buffer $gripper_buffer \
     --image_size $image_size \
     --num_workers 4 \
-    --max_episode_length 30 \
-    --train_iters 100 \
+    --max_episode_length 20 \
+    --train_iters 500 \
     --embedding_dim $C \
     --use_instruction 1 \
     --rotation_parametrization 6D \
