@@ -153,11 +153,9 @@ class CalvinDataset(RLBenchDataset):
         # Get action tensors for respective frame ids
         action = torch.cat([episode[2][i] for i in frame_ids])
 
-        # Replace instruction handling with random generation
         if self._instructions is not None:
-            # Generate random instruction embeddings
-            instr = torch.randn(53, 512, device='cpu')  # Random normal distribution
-            instr = instr.repeat(len(rgbs), 1, 1)
+            instr_ind = episode[6][0]
+            instr = torch.as_tensor(self._instructions[instr_ind])
         else:
             instr = torch.zeros((rgbs.shape[0], 53, 512))
 
