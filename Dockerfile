@@ -1,4 +1,4 @@
-FROM ghcr.io/selkies-project/nvidia-egl-desktop:20.04-20240425164112
+FROM nvidia/cuda:11.6.1-cudnn8-devel-ubuntu20.04
 ENV PATH="/root/miniconda3/bin:$PATH"
 ARG PATH="/root/miniconda3/bin:$PATH"
 RUN apt-get update && apt-get install -y libopenblas-dev
