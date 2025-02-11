@@ -32,3 +32,8 @@ $ python3 data_preprocessing/package_calvin.py --split training
 $ python3 data_preprocessing/package_calvin.py --split validation
 ```
 This should create a new folder called `calvin_processed` with the required structure. For now, the indices for training and validation set from calvin data has been hardcoded for `run10` for quick testing. This will be changed soon.
+
+To train the policy, run:
+```bash
+$ bash scripts/train_trajectory_calvin.sh
+```
