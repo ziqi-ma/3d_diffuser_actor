@@ -94,11 +94,11 @@ class DiffuserActor(nn.Module):
         context_feats = einops.rearrange(rgb_feats_pyramid[0], "b ncam c h w -> b (ncam h w) c")
         context = pcd_pyramid[0]        
         #context_feats = F.layer_norm(context_feats, [context_feats.shape[-1]])
-        debug_tensor(context_feats, "context_feats after norm")
+        #debug_tensor(context_feats, "context_feats after norm")
 
         instr_feats = None
         if self.use_instruction:
-            print(f"instruction type {type(instruction)}")
+            print(f"instruction shape {instruction.shape}")
             instr_feats, _ = self.encoder.encode_instruction(instruction)
             #instr_feats = F.layer_norm(instr_feats, [instr_feats.shape[-1]])
             #debug_tensor(instr_feats, "instr_feats")
@@ -240,21 +240,12 @@ class DiffuserActor(nn.Module):
         )
         cond_mask = torch.zeros_like(cond_data)
         cond_mask = cond_mask.bool()
-
-        has_nans = any([
-            check_nans(cond_data, "cond_data"),
-            check_nans(cond_mask.float(), "cond_mask"),  # Convert bool to float for NaN check
-            check_nans(fixed_inputs, "fixed_inputs")
-        ])
-        # Sample
         #print(f"conditional sample check {cond_data.isnan().any()}, {cond_mask.isnan().any()}, {fixed_inputs.isnan().any()}")
         trajectory = self.conditional_sample(
             cond_data,
             cond_mask,
             fixed_inputs
         )
-        if has_nans:
-            raise ValueError("NaN values detected before conditional_sample")
 
         print(f"check for nan in trajectory {trajectory.isnan().any()}")
         #print(f"trajectory values {trajectory}")
