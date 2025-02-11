@@ -155,6 +155,7 @@ class CalvinDataset(RLBenchDataset):
 
         if self._instructions is not None:
             instr_ind = episode[6][0]
+            #print(f"instruction type {type(self._instructions)}")
             instr = torch.as_tensor(self._instructions[instr_ind])
         else:
             instr = torch.zeros((rgbs.shape[0], 53, 512))

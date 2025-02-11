@@ -33,10 +33,12 @@ class TrainTester(BaseTrainTester):
 
     def get_datasets(self):
         """Initialize datasets."""
-        # Use dummy instructions (just True to enable random generation)
-        train_instruction = True
-        test_instruction = True
-        
+        train_instruction = load_instructions(
+            self.args.instructions, 'training'
+        )
+        test_instruction = load_instructions(
+            self.args.instructions, 'validation'
+        )
         taskvar = [
             ("A", 0),
         ]
