@@ -1,3 +1,4 @@
+## If you are running on a single run, follow these instructions:
 ### First create a docker environment:
 Note: All of my folders are in `/robo` including 3d-diffuser-actor. Change this path to your folder. 
 ```bash
@@ -45,3 +46,12 @@ Now we can train the policy, run:
 ```bash
 $ bash scripts/train_trajectory_calvin.sh
 ```
+
+## If you are running with multiple runs, you can simply execute all these together:
+```bash
+$ cd /workspace/
+$ bash process_all_runs.sh
+```
+
+
+
