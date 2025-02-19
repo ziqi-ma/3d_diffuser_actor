@@ -1,7 +1,9 @@
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+
 main_dir=Planner_Calvin
 
-dataset=/workspace/3d_diffuser_actor/calvin_processed/training/
-valset=/workspace/3d_diffuser_actor/calvin_processed/validation/
+dataset=/workspace/3d_diffuser_actor/calvin_complete_processed/training/
+valset=/workspace/3d_diffuser_actor/calvin_complete_processed/validation/
 
 lr=1e-5
 wd=1e-2
@@ -9,7 +11,7 @@ dense_interpolation=1
 interpolation_length=20
 num_history=3
 diffusion_timesteps=25
-B=8
+B=16
 C=192
 ngpus=2
 backbone=clip
@@ -32,12 +34,12 @@ CUDA_LAUNCH_BLOCKING=1 torchrun --nproc_per_node $ngpus --master_port $RANDOM \
     --backbone $backbone \
     --dataset $dataset \
     --valset $valset \
-    --instructions instructions/calvin_task_ABC_D/ \
+    --instructions instructions/calvin_task_ABC_D_complete/ \
     --gripper_loc_bounds_buffer $gripper_buffer \
     --image_size $image_size \
-    --num_workers 4 \
+    --num_workers 2 \
     --max_episode_length 20 \
-    --train_iters 100 \
+    --train_iters 60000 \
     --embedding_dim $C \
     --use_instruction 0 \
     --rotation_parametrization 6D \
@@ -48,7 +50,7 @@ CUDA_LAUNCH_BLOCKING=1 torchrun --nproc_per_node $ngpus --master_port $RANDOM \
     --interpolation_length $interpolation_length \
     --exp_log_dir $main_dir \
     --batch_size $B \
-    --batch_size_val 3 \
+    --batch_size_val 2 \
     --cache_size 0 \
     --cache_size_val 0 \
     --keypose_only 0 \

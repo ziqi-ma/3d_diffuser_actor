@@ -3,61 +3,68 @@ import os
 from pathlib import Path
 from transformers import CLIPTokenizer, CLIPTextModel
 import torch
+import json
 
-def generate_language_annotations(training_dir, val_dir, task_description="pick the mug and place it down"):
+def generate_language_annotations(training_dir, val_dir, task_description="pick the cube and place it down"):
     """Generate language annotations file for CALVIN dataset format."""
     
-    # Get episode files and sort them
-    train_episodes = sorted([f for f in os.listdir(training_dir) if f.endswith('.npz')])
-    val_episodes = sorted([f for f in os.listdir(val_dir) if f.endswith('.npz')])
+    # Load run info to get proper episode ranges
+    run_info_file = Path(training_dir).parent / 'run_info.json'
+    with open(run_info_file, 'r') as f:
+        runs = json.load(f)
     
-    # Extract start and end indices from filenames
-    train_indices = [int(f.split('_')[1].split('.')[0]) for f in train_episodes]
-    val_indices = [int(f.split('_')[1].split('.')[0]) for f in val_episodes]
+    # Create sequences from run info
+    train_sequences = []
+    val_sequences = []
     
-    # Create separate annotations for training and validation
-    def create_split_annotations(episodes, start_idx, end_idx):
-        # For a single task, we'll create one sequence that encompasses all episodes
-        indices = [(start_idx, end_idx)]
+    for run in runs:
+        start_idx = run['start_idx']
+        end_idx = run['end_idx']
+        n_train = run['n_train']
         
-        # Initialize CLIP model for embeddings (same as CALVIN)
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-        model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+        # Add training sequence
+        if n_train > 0:
+            train_sequences.append((start_idx, start_idx + n_train - 1))
         
-        # Generate embedding for the task description
-        with torch.no_grad():
-            tokens = tokenizer(task_description, padding="max_length", return_tensors="pt").to(device)
-            embedding = model(**tokens).last_hidden_state.cpu().numpy()
-        
-        # Create the annotation structure
-        lang_ann = {
-            'language': {
-                'ann': [task_description],    # Single task description
-                'task': ['pick_mug'],         # Single task identifier
-                'emb': embedding              # Shape will be (1, 1, 384)
-            },
-            'info': {
-                'episodes': [],               # Empty list as per original structure
-                'indx': indices              # Single tuple with start and end indices
-            }
+        # Add validation sequence
+        if end_idx > (start_idx + n_train - 1):
+            val_sequences.append((start_idx + n_train, end_idx))
+    
+    # Initialize CLIP model for embeddings
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+    model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
+    
+    # Generate embedding for the task description
+    with torch.no_grad():
+        tokens = tokenizer(task_description, padding="max_length", return_tensors="pt").to(device)
+        embedding = model(**tokens).last_hidden_state.cpu().numpy()
+    
+    # Create annotations for training
+    train_ann = {
+        'language': {
+            'ann': [task_description] * len(train_sequences),
+            'task': ['pick_cube'] * len(train_sequences),
+            'emb': np.repeat(embedding, len(train_sequences), axis=0)
+        },
+        'info': {
+            'episodes': [],
+            'indx': train_sequences
         }
-        
-        return lang_ann
+    }
     
-    # Generate annotations for training split
-    train_ann = create_split_annotations(
-        train_episodes,
-        min(train_indices),
-        max(train_indices)
-    )
-    
-    # Generate annotations for validation split
-    val_ann = create_split_annotations(
-        val_episodes,
-        min(val_indices),
-        max(val_indices)
-    )
+    # Create annotations for validation
+    val_ann = {
+        'language': {
+            'ann': [task_description] * len(val_sequences),
+            'task': ['pick_cube'] * len(val_sequences),
+            'emb': np.repeat(embedding, len(val_sequences), axis=0)
+        },
+        'info': {
+            'episodes': [],
+            'indx': val_sequences
+        }
+    }
     
     # Save the annotations
     os.makedirs(os.path.join(training_dir, "lang_annotations"), exist_ok=True)
@@ -70,10 +77,13 @@ def generate_language_annotations(training_dir, val_dir, task_description="pick 
 
 # Example usage
 if __name__ == "__main__":
-    training_dir = "/workspace/3d_diffuser_actor/calvin_new/training"
-    val_dir = "/workspace/3d_diffuser_actor/calvin_new/validation"
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--training_dir', type=str, default="/workspace/3d_diffuser_actor/calvin_complete/training")
+    parser.add_argument('--val_dir', type=str, default="/workspace/3d_diffuser_actor/calvin_complete/validation")
+    args = parser.parse_args()
     
-    train_ann, val_ann = generate_language_annotations(training_dir, val_dir)
+    train_ann, val_ann = generate_language_annotations(args.training_dir, args.val_dir)
     
     # Print structure to verify
     print("\nGenerated training annotation structure:")

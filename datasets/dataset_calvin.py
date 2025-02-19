@@ -5,10 +5,29 @@ import random
 from pathlib import Path
 
 import torch
+import matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
+from matplotlib.patches import FancyArrowPatch
+from mpl_toolkits.mplot3d import proj3d
 
 from .dataset_engine import RLBenchDataset
 from .utils import Resize, TrajectoryInterpolator
 from utils.utils_with_calvin import to_relative_action, convert_rotation
+matplotlib.use('Agg') 
+
+# Add this class for drawing 3D arrows
+class Arrow3D(FancyArrowPatch):
+    def __init__(self, xs, ys, zs, *args, **kwargs):
+        super().__init__((0,0), (0,0), *args, **kwargs)
+        self._verts3d = xs, ys, zs
+
+    def do_3d_projection(self, renderer=None):
+        xs3d, ys3d, zs3d = self._verts3d
+        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
+        self.set_positions((xs[0],ys[0]),(xs[1],ys[1]))
+        return np.min(zs)
 
 
 class CalvinDataset(RLBenchDataset):
@@ -99,6 +118,103 @@ class CalvinDataset(RLBenchDataset):
 
         print(f"Created dataset from {root} with {self._num_episodes}")
 
+    def visualize_trajectory(self, episode_id):
+        """Visualize keyframes, interpolated trajectory and chunks."""
+        episode_id %= self._num_episodes
+        task, variation, file = self._episodes[episode_id]
+        episode = self.read_from_cache(file)
+        
+        # Create 3D plot
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        
+        # Get all keyframe positions and orientations
+        keyframe_positions = []
+        keyframe_orientations = []
+        for i in episode[0]:  # episode[0] contains frame indices
+            pos = episode[2][i][:3]  # Position
+            if isinstance(pos, torch.Tensor):
+                pos = pos.detach().cpu().numpy()
+            else:
+                pos = np.array(pos)
+            
+            quat = episode[2][i][3:7]  # Quaternion
+            if isinstance(quat, torch.Tensor):
+                quat = quat.detach().cpu().numpy()
+            else:
+                quat = np.array(quat)
+            
+            keyframe_positions.append(pos.reshape(-1))
+            keyframe_orientations.append(quat.reshape(-1))
+        
+        keyframe_positions = np.array(keyframe_positions)
+        keyframe_orientations = np.array(keyframe_orientations)
+        
+        # Define distinct colors for each chunk
+        chunk_colors = ['red', 'blue', 'green', 'purple', 'orange', 'cyan', 'magenta', 'yellow']
+        chunk_size = self._max_episode_length
+        num_chunks = math.ceil(len(keyframe_positions) / chunk_size)
+        
+        # Plot chunks with different colors and add separators
+        for chunk_idx in range(num_chunks):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min((chunk_idx + 1) * chunk_size, len(keyframe_positions))
+            chunk = keyframe_positions[start_idx:end_idx]
+            color = chunk_colors[chunk_idx % len(chunk_colors)]
+            
+            # Plot keyframes for this chunk
+            ax.scatter(chunk[:, 0], chunk[:, 1], chunk[:, 2],
+                      c=color, s=100, 
+                      label=f'Chunk {chunk_idx + 1} Keyframes')
+            
+            # Plot interpolated trajectories within this chunk
+            for i in range(len(chunk)-1):
+                if len(episode) > 5:
+                    traj = self._interpolate_traj(episode[5][start_idx + i])
+                    if isinstance(traj, torch.Tensor):
+                        traj = traj.detach().cpu().numpy()
+                    traj_pos = traj[:, :3]
+                    ax.plot(traj_pos[:, 0], traj_pos[:, 1], traj_pos[:, 2],
+                           color=color, linestyle='-', alpha=0.3)
+            
+            # Draw orientation arrows for keyframes in this chunk
+            arrow_length = 0.05
+            for pos, quat in zip(chunk, keyframe_orientations[start_idx:end_idx]):
+                direction = np.array([1, 0, 0]) * arrow_length
+                arrow = Arrow3D((pos[0], pos[0] + direction[0]),
+                              (pos[1], pos[1] + direction[1]),
+                              (pos[2], pos[2] + direction[2]),
+                              mutation_scale=10, lw=1, arrowstyle='->', color=color)
+                ax.add_artist(arrow)
+            
+            # Add a vertical line separator between chunks (if not the last chunk)
+            if chunk_idx < num_chunks - 1 and len(chunk) > 0:
+                last_pos = chunk[-1]
+                next_pos = keyframe_positions[end_idx] if end_idx < len(keyframe_positions) else chunk[-1]
+                mid_point = (last_pos + next_pos) / 2
+                
+                # Draw a vertical separator
+                height = 0.1  # Adjust this value to change separator height
+                ax.plot([mid_point[0], mid_point[0]], 
+                       [mid_point[1], mid_point[1]], 
+                       [mid_point[2]-height, mid_point[2]+height],
+                       'k--', linewidth=2, alpha=0.5)
+        
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+        plt.title(f'Task: {task}, Variation: {variation}')
+        
+        # Adjust layout to prevent legend from being cut off
+        plt.tight_layout()
+        
+        # Save plot instead of displaying
+        save_path = f'chunk_viz/trajectory_vis_{task}_{variation}_{episode_id}.png'
+        plt.savefig(save_path, bbox_inches='tight')
+        plt.close()  # Close the figure to free memory
+
     def __getitem__(self, episode_id):
         """
         the episode item: [
@@ -111,6 +227,9 @@ class CalvinDataset(RLBenchDataset):
             [trajectories]  # wrt frame_ids, (N_i, 8)
         ]
         """
+        if episode_id % 20 == 0:  # Visualize every 20th episode
+            self.visualize_trajectory(episode_id)
+
         episode_id %= self._num_episodes
         task, variation, file = self._episodes[episode_id]
 

@@ -16,7 +16,6 @@ from utils.common_utils import (
     load_instructions, get_gripper_loc_bounds
 )
 
-
 def load_instructions(instructions, split):
     instructions = pickle.load(
         open(f"{instructions}/{split}.pkl", "rb")
@@ -46,7 +45,7 @@ class TrainTester(BaseTrainTester):
         # Initialize datasets with arguments
         train_dataset = CalvinDataset(
             root=self.args.dataset,
-            instructions=train_instruction,  # Just pass True
+            instructions=train_instruction, 
             taskvar=taskvar,
             max_episode_length=self.args.max_episode_length,
             cache_size=self.args.cache_size,
@@ -127,7 +126,6 @@ class TrainTester(BaseTrainTester):
         optimizer = optim.AdamW(optimizer_grouped_parameters)
         return optimizer
 
-
 def generate_visualizations(pred, gt, mask, box_size=0.05):
     batch_idx = 0
     images = []
@@ -176,7 +174,7 @@ if __name__ == '__main__':
     print(args)
     print("-" * 100)
     if args.gripper_loc_bounds is None:
-        args.gripper_loc_bounds = np.array([[-2, -2, -2], [2, 2, 2]]) * 1.0
+        args.gripper_loc_bounds = np.array([[-2, -2, -2], [2, 2, 2]]) * 0.1
     else:
         args.gripper_loc_bounds = get_gripper_loc_bounds(
             args.gripper_loc_bounds,
