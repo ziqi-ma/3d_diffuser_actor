@@ -20,8 +20,8 @@ from utils.utils_with_calvin import (
 class Arguments(tap.Tap):
     traj_len: int = 16
     execute_every: int = 4
-    save_path: str = 'calvin_processed'
-    root_dir: str = 'calvin_new'
+    save_path: str = 'calvin_complete_processed'
+    root_dir: str = 'calvin_complete'
     mode: str = 'keypose'  # [keypose, close_loop]
     tasks: Optional[List[str]] = None
     split: str = 'validation'  # [training, validation]
@@ -160,29 +160,37 @@ def process_datas(datas, mode, traj_len, execute_every, keyframe_inds):
 def load_episode(root_dir, split, episode, datas, ann_id):
     data = np.load(f'{root_dir}/{split}/{episode}')
     camera_info_file = np.load(f'{root_dir}/camera_info.npz', allow_pickle=True)
-    camera_info = camera_info_file['data'].item()  # Add .item() to convert numpy object array to dict
-    # Create camera parameter dictionaries with dimensions from loaded data
+    camera_info = camera_info_file['data'].item()
+    
+    # Get camera IDs for static and gripper cameras
+    # Static camera has larger ID (33387783), gripper camera has smaller ID (19798856)
+    camera_ids = list(camera_info.keys())
+    static_cam_id = max(camera_ids)  # Larger ID is static camera
+    gripper_cam_id = min(camera_ids)  # Smaller ID is gripper camera
+    
+    # Create camera parameter dictionaries
     static_cam_params = {
-        'resolution_width': camera_info['static']['resolution_width'],
-        'resolution_height': camera_info['static']['resolution_height'],
-        'fx': camera_info['static']['fx'],
-        'fy': camera_info['static']['fy'],
-        'cx': camera_info['static']['cx'],
-        'cy': camera_info['static']['cy'],
+        'resolution_width': camera_info[static_cam_id]['resolution_width'],
+        'resolution_height': camera_info[static_cam_id]['resolution_height'],
+        'fx': camera_info[static_cam_id]['fx'],
+        'fy': camera_info[static_cam_id]['fy'],
+        'cx': camera_info[static_cam_id]['cx'],
+        'cy': camera_info[static_cam_id]['cy'],
         'width': data['rgb_static'].shape[1],
         'height': data['rgb_static'].shape[0]
     }
     
     gripper_cam_params = {
-        'resolution_width': camera_info['gripper']['resolution_width'],
-        'resolution_height': camera_info['gripper']['resolution_height'],
-        'fx': camera_info['gripper']['fx'],
-        'fy': camera_info['gripper']['fy'],
-        'cx': camera_info['gripper']['cx'],
-        'cy': camera_info['gripper']['cy'],
+        'resolution_width': camera_info[gripper_cam_id]['resolution_width'],
+        'resolution_height': camera_info[gripper_cam_id]['resolution_height'],
+        'fx': camera_info[gripper_cam_id]['fx'],
+        'fy': camera_info[gripper_cam_id]['fy'],
+        'cx': camera_info[gripper_cam_id]['cx'],
+        'cy': camera_info[gripper_cam_id]['cy'],
         'width': data['rgb_gripper'].shape[1],
         'height': data['rgb_gripper'].shape[0]
     }
+    
     # Use the modified deproject function
     static_pcd = deproject(
         static_cam_params, 

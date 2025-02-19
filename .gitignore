@@ -17,6 +17,7 @@ __pycache__
 *.egg-info/
 peract_model
 diffusion_taskABC_D-C192-B30-lr3e-4-DI1-20-Phistory_selfattn_epsilon_instrcond-H3-DT25-backboneclip-S256,256-R1-wd5e-3
+instructions/
 
 # train/test directory
 train_logs/
@@ -25,6 +26,7 @@ temp/
 
 # third-party modules
 calvin/
+calvin_env/
 
 # data directory
 data/
@@ -33,4 +35,85 @@ data/
 calvin_new/
 calvin_processed/
 calvin_processed_old/
+
+calvin_complete/
+calvin_complete_processed/
+
+#wandb
+wandb/
+
+#visualizations
+chunk_viz/
+
+#other extras
+trajectory_vis_A_0_1.png
+trajectory_vis_A_0_2.png
+trajectory_vis_A_0_3.png
+trajectory_vis_A_0_4.png
+trajectory_vis_A_0_5.png
+trajectory_vis_A_0_6.png
+trajectory_vis_A_0_7.png
+trajectory_vis_A_0_8.png
+trajectory_vis_A_0_9.png
+trajectory_vis_A_0_10.png
+trajectory_vis_A_0_11.png
+trajectory_vis_A_0_12.png
+trajectory_vis_A_0_13.png
+trajectory_vis_A_0_14.png
+trajectory_vis_A_0_15.png
+trajectory_vis_A_0_16.png
+trajectory_vis_A_0_17.png
+trajectory_vis_A_0_18.png
+trajectory_vis_A_0_19.png
+trajectory_vis_A_0_20.png
+trajectory_vis_A_0_21.png
+trajectory_vis_A_0_22.png
+trajectory_vis_A_0_23.png
+trajectory_vis_A_0_24.png
+trajectory_vis_A_0_25.png
+trajectory_vis_A_0_26.png
+trajectory_vis_A_0_27.png
+trajectory_vis_A_0_28.png
+trajectory_vis_A_0_29.png
+trajectory_vis_A_0_30.png
+trajectory_vis_A_0_31.png
+trajectory_vis_A_0_32.png
+trajectory_vis_A_0_33.png
+trajectory_vis_A_0_34.png
+trajectory_vis_A_0_35.png
+trajectory_vis_A_0_36.png
+trajectory_vis_A_0_37.png
+trajectory_vis_A_0_38.png
+trajectory_vis_A_0_39.png
+trajectory_vis_A_0_40.png
+trajectory_vis_A_0_41.png
+trajectory_vis_A_0_42.png
+trajectory_vis_A_0_43.png
+trajectory_vis_A_0_44.png
+trajectory_vis_A_0_45.png
+trajectory_vis_A_0_46.png
+trajectory_vis_A_0_47.png
+trajectory_vis_A_0_48.png
+trajectory_vis_A_0_49.png
+trajectory_vis_A_0_50.png
+trajectory_vis_A_0_51.png
+trajectory_vis_A_0_52.png
+trajectory_vis_A_0_53.png
+trajectory_vis_A_0_54.png
+trajectory_vis_A_0_55.png
+trajectory_vis_A_0_56.png
+trajectory_vis_A_0_57.png
+trajectory_vis_A_0_58.png
+trajectory_vis_A_0_59.png
+trajectory_vis_A_0_60.png
+trajectory_vis_A_0_61.png
+
+
+
+
+
+
+
+
+
 

@@ -13,6 +13,7 @@ import tap
 import torch
 import torch.distributed as dist
 from torch.nn import functional as F
+import wandb
 
 from datasets.dataset_engine import RLBenchDataset
 from engine import BaseTrainTester
@@ -85,6 +86,13 @@ class TrainTester(BaseTrainTester):
     def __init__(self, args):
         """Initialize."""
         super().__init__(args)
+        if dist.get_rank() == 0:
+            # Initialize wandb
+            wandb.init(
+                project="3d-diffuser-actor",
+                name=args.run_log_dir,
+                config=args.__dict__
+            )
 
     def get_datasets(self):
         """Initialize datasets."""
@@ -202,7 +210,13 @@ class TrainTester(BaseTrainTester):
         # Log
         if dist.get_rank() == 0 and (step_id + 1) % self.args.val_freq == 0:
             self.writer.add_scalar("lr", self.args.lr, step_id)
-            self.writer.add_scalar("train-loss/noise_mse", loss, step_id)
+            self.writer.add_scalar("train-loss/noise_mse", loss.item(), step_id)
+            
+            # Add wandb logging
+            wandb.log({
+                "lr": self.args.lr,
+                "train-loss/noise_mse": loss.item()
+            }, step=step_id)
 
     @torch.no_grad()
     def evaluate_nsteps(self, model, criterion, loader, step_id, val_iters,
@@ -276,17 +290,30 @@ class TrainTester(BaseTrainTester):
         # Log all statistics
         values = self.synchronize_between_processes(values)
         values = {k: v.mean().item() for k, v in values.items()}
+        
         if dist.get_rank() == 0:
-            if step_id > -1:
-                for key, val in values.items():
-                    self.writer.add_scalar(key, val, step_id)
-
-            # Also log to terminal
-            print(f"Step {step_id}:")
+            # Filter and log metrics
+            filtered_metrics = {}
             for key, value in values.items():
-                print(f"{key}: {value}")
+                if not ('<0.01' in key or '<0.025' in key):
+                    metric_name = f"{split}-{key}"
+                    filtered_metrics[metric_name] = value
+                    self.writer.add_scalar(metric_name, value, step_id)
+            
+            # Log to wandb
+            wandb.log(filtered_metrics, step=step_id)
+            
+            # Terminal logging
+            print(f"\nStep {step_id} ({split}):")
+            for key, value in filtered_metrics.items():
+                print(f"{key}: {value:.4f}")
 
-        return values.get('val-losses/traj_pos_acc_001', None)
+        return values.get('traj_pos_acc_001', None)
+
+    def __del__(self):
+        """Cleanup wandb on deletion."""
+        if dist.get_rank() == 0:
+            wandb.finish()
 
 
 def traj_collate_fn(batch):
